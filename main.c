@@ -29,11 +29,11 @@ typedef struct {
 
 static const r3d_drawcall_t meshes[] = {
 	{ R3D_PRIMITIVE_TYPE_TRIANGLES, vertices0,
-	  sizeof(vertex_t), sizeof(vertices0) / sizeof(vertex_t), 0 },
+		sizeof(vertex_t), sizeof(vertices0) / sizeof(vertex_t), 0 },
 	{ R3D_PRIMITIVE_TYPE_TRIANGLES, vertices1,
-	  sizeof(vertex_t), sizeof(vertices1) / sizeof(vertex_t), 0 },
+		sizeof(vertex_t), sizeof(vertices1) / sizeof(vertex_t), 0 },
 	{ R3D_PRIMITIVE_TYPE_TRIANGLES, vertices2,
-	  sizeof(vertex_t), sizeof(vertices2) / sizeof(vertex_t), 0 },
+		sizeof(vertex_t), sizeof(vertices2) / sizeof(vertex_t), 0 },
 };
 static const r3d_primitive_winding_t windings[] = {
 	R3D_PRIMITIVE_WINDING_CW,
@@ -62,6 +62,19 @@ typedef struct {
 	vec2_t uv;
 } vs_to_fs_t;
 
+typedef struct{
+	//point light or directional light?
+	int point;
+	vec3_t position;
+	//light intensity can be greater than 1.0f
+	vec3_t color;
+} light_t;
+
+static light_t lights[]={
+	{.point=0, .position={ .x=-0.577350269f, .y=0.577350269f, .z=0.577350269f }, .color={.r=0.8f, .g=0.8f, .b=0.0f}},
+	{.point=0, .position={ .x=0.577350269f, .y=-0.577350269f, .z=0.577350269f }, .color={.r=0.0f, .g=0.8f, .b=0.8f}}
+};
+
 static void vertex_shader(const vertex_t *in, vs_to_fs_t *out)
 {
 	// decode vertex
@@ -78,25 +91,34 @@ static void vertex_shader(const vertex_t *in, vs_to_fs_t *out)
 
 static vec4_t fragment_shader(const vs_to_fs_t *in)
 {
+	vec3_t result = { 0, 0, 0 };
+	//eye position
 	const vec3_t E = { 0, 0, 1 };
-	const vec3_t L = { -0.577350269f, 0.577350269f, 0.577350269f };
-	vec3_t N = vec3_normalize(in->normal);
-	vec3_t H = vec3_normalize(vec3_add(E, L));
 
 	const float ambient = 0.05f;
-	float diffuse = vec3_dot(N, L) * 0.6f;
-	float specular = vec3_dot(N, H);
-	specular *= specular;
-	specular *= specular;
-	specular *= specular;
-	specular *= specular;
-	specular *= specular;
-	specular *= specular * 0.6f;
+	float diffuse, specular;
 
-	vec3_t c = r3d_texture_nearest(textures[mesh], in->uv); // read texel
-	return vec4(ambient + diffuse * c.r + specular,
-	            ambient + diffuse * c.g + specular,
-	            ambient + diffuse * c.b + specular, 1.0f);
+	vec3_t N = vec3_normalize(in->normal);
+
+	int i;
+	for(i=0; i<sizeof(lights)/sizeof(light_t); i++){
+		vec3_t H = vec3_normalize(vec3_add(E, lights[i].position));
+
+		diffuse = vec3_dot(N, lights[i].position);
+		specular = vec3_dot(N, H);
+		specular *= specular;
+		specular *= specular;
+		specular *= specular;
+		specular *= specular;
+		specular *= specular;
+		specular *= specular * 0.6f;
+
+		vec3_t c = r3d_texture_nearest(textures[mesh], in->uv); // read texel
+		result.r += diffuse * c.r * lights[i].color.r + specular;
+		result.g += diffuse * c.g * lights[i].color.g + specular;
+		result.b += diffuse * c.b * lights[i].color.b + specular;
+	}
+	return vec4(ambient + result.r,	ambient + result.g, ambient + result.b, 1.0f);
 }
 
 static r3d_shader_t shader = {
@@ -173,8 +195,8 @@ static void update(void)
 	if (axes[0] < 0) axes[0] = 0;
 	if (axes[0] > 180) axes[0] = 180;
 	model = mat4_mul(
-	            mat4_rotation(axes[0], vec3(1.0f, 0.0f, 0.0f)),
-	            mat4_rotation(axes[1], vec3(0.0f, 1.0f, 0.0f)));
+			mat4_rotation(axes[0], vec3(1.0f, 0.0f, 0.0f)),
+			mat4_rotation(axes[1], vec3(0.0f, 1.0f, 0.0f)));
 	if (mesh == 1) model = mat4_mul(model, mat4_scaling(vec3(0.5f, 0.5f, 0.5f)));
 	mv = mat4_mul(view, model);
 	mvp = mat4_mul(projection, mv);
